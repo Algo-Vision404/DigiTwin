@@ -1,0 +1,65 @@
+groups:
+  - name: digital_twin_alerts
+    rules:
+      - alert: HighSimulationLatency
+        expr: sim_latency_ms > 50
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Simulation latency exceeds 50ms"
+          description: "Current latency: {{ $value }}ms"
+
+      - alert: GPUUtilizationCritical
+        expr: gpu_utilization_percent > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU utilization critically high"
+          description: "GPU at {{ $value }}% utilization"
+
+      - alert: MemoryPressure
+        expr: memory_usage_mb > 800
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory usage high"
+          description: "Memory at {{ $value }}MB"
+
+      - alert: EventQueueBackpressure
+        expr: queue_pressure_percent > 80
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Event queue backpressure detected"
+          description: "Queue pressure at {{ $value }}%"
+
+      - alert: SyncLagHigh
+        expr: sync_lag_ms > 15
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "State synchronization lag elevated"
+          description: "Sync lag: {{ $value }}ms"
+
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} instance {{ $labels.instance }} is unreachable"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate detected"
+          description: "{{ $value | humanizePercentage }} of requests are failing"

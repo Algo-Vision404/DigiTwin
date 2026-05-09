@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USER & ACCESS CONTROL
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  role          String    @default("operator") // admin, operator, analyst, viewer
+  passwordHash  String?
+  avatar        String?
+  lastLoginAt   DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  auditLogs     AuditLog[]
+  apiTokens     ApiToken[]
+}
+
+model ApiToken {
+  id          String   @id @default(cuid())
+  userId      String
+  token       String   @unique
+  name        String
+  permissions String   @default("read")
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+// ============================================================
+// DIGITAL TWIN ENTITIES
+// ============================================================
+
+model TwinEnvironment {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        String   // smart-city, warehouse, robotics, industrial, logistics, traffic
+  config      String   @default("{}") // JSON config for the environment
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entities    TwinEntity[]
+  snapshots   StateSnapshot[]
+  scenarios   Scenario[]
+}
+
+model TwinEntity {
+  id              String         @id @default(cuid())
+  environmentId   String
+  entityType      String         // vehicle, robot, drone, sensor, camera, machine, zone, road, shelf, person
+  name            String
+  description     String?
+  properties      String         @default("{}") // JSON: position, velocity, heading, status, etc.
+  status          String         @default("active") // active, inactive, warning, error
+  metadata        String         @default("{}") // JSON: manufacturer, model, serial, etc.
+  spatialIndex    String         @default("") // spatial hash for spatial queries
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  environment     TwinEnvironment @relation(fields: [environmentId], references: [id])
+  telemetry       TelemetryEvent[]
+}
+
+// ============================================================
+// TELEMETRY & EVENTS
+// ============================================================
+
+model TelemetryEvent {
+  id            String      @id @default(cuid())
+  entityId      String
+  sensorType    String      // gps, temperature, humidity, speed, occupancy, rfid, lidar, camera, accelerometer, pressure, voltage
+  source        String      // iot, mqtt, kafka, api, csv, websocket
+  value         Float
+  unit          String?
+  quality       Int         @default(100) // data quality score 0-100
+  metadata      String      @default("{}") // JSON: raw payload, correlation IDs
+  isProcessed   Boolean     @default(false)
+  partitionKey  String      @default("")
+  timestamp     DateTime    @default(now())
+
+  entity        TwinEntity  @relation(fields: [entityId], references: [id])
+}
+
+// ============================================================
+// SIMULATION ENGINE
+// ============================================================
+
+model SimulationRun {
+  id              String    @id @default(cuid())
+  environmentId   String?
+  name            String
+  status          String    @default("pending") // pending, running, paused, completed, failed
+  config          String    @default("{}") // JSON: physics config, time scale, etc.
+  startTime       DateTime?
+  endTime         DateTime?
+  durationMs      Int?
+  tickCount       Int       @default(0)
+  errorMessage    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model StateSnapshot {
+  id              String          @id @default(cuid())
+  environmentId   String
+  simulationRunId String?
+  snapshotType    String          // live, simulation, replay
+  stateData       String          // JSON: full state of all entities
+  tickNumber      Int?
+  timestamp       DateTime        @default(now())
+
+  environment     TwinEnvironment @relation(fields: [environmentId], references: [id])
+}
+
+// ============================================================
+// SCENARIO TESTING
+// ============================================================
+
+model Scenario {
+  id              String         @id @default(cuid())
+  environmentId   String
+  name            String
+  description     String?
+  type            String         // road-closure, demand-surge, equipment-failure, weather-event, custom
+  parameters      String         @default("{}") // JSON: scenario parameters
+  baselineState   String         // JSON: snapshot of state when scenario was created
+  results         String?        // JSON: simulation results
+  riskScore       Float?
+  estimatedDelay  Float?
+  estimatedCost   Float?
+  status          String         @default("draft") // draft, running, completed, failed
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  environment     TwinEnvironment @relation(fields: [environmentId], references: [id])
+}
+
+// ============================================================
+// AI & ANALYTICS
+// ============================================================
+
+model AIRecommendation {
+  id              String    @id @default(cuid())
+  type            String    // routing, scheduling, energy, bottleneck, safety, predictive
+  priority        String    @default("medium") // critical, high, medium, low
+  title           String
+  description     String
+  impact          String    @default("{}") // JSON: estimated impact metrics
+  confidence      Float     @default(0.0)
+  status          String    @default("pending") // pending, acknowledged, implemented, dismissed
+  expiresAt       DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+model AnomalyEvent {
+  id              String    @id @default(cuid())
+  entityId        String?
+  anomalyType     String    // congestion, equipment_failure, throughput_drop, queue_buildup, temperature_spike, unexpected_behavior
+  severity        String    @default("medium") // low, medium, high, critical
+  description     String
+  metadata        String    @default("{}") // JSON: raw data, model output, etc.
+  isResolved      Boolean   @default(false)
+  resolvedAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
+
+// ============================================================
+// OBSERVABILITY
+// ============================================================
+
+model SystemMetric {
+  id          String   @id @default(cuid())
+  metricName  String   // event_throughput, sim_latency, gpu_utilization, sync_lag, memory_usage, queue_pressure, dropped_events, inference_latency
+  value       Float
+  unit        String?
+  labels      String   @default("{}") // JSON: dimension labels
+  timestamp   DateTime @default(now())
+}
+
+model AlertRule {
+  id          String   @id @default(cuid())
+  name        String
+  metricName  String
+  condition   String   @default("{}") // JSON: threshold, operator, window
+  severity    String   @default("warning") // info, warning, critical
+  isActive    Boolean  @default(true)
+  cooldown    Int      @default(300) // seconds
+  createdAt   DateTime @default(now())
+}
